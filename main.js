@@ -1,8 +1,13 @@
 import { Actor } from 'apify';
 import { PlaywrightCrawler } from 'crawlee';
+import { chromium } from 'playwright-extra';
+import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 
 // Initialize the Apify SDK
 await Actor.init();
+
+// Apply the stealth plugin to hide headless browser signatures from Cloudflare/anti-bot systems
+chromium.use(stealthPlugin());
 
 // Fetch Actor inputs
 const input = await Actor.getInput() || {};
@@ -33,7 +38,7 @@ const {
     host = "www.indeed.com"
 } = input;
 
-console.log(`Starting Indeed Job Scraper using Playwright with parameters:`);
+console.log(`Starting Indeed Job Scraper using Playwright Stealth with parameters:`);
 console.log(`- Keywords: ${JSON.stringify(keywords)}`);
 console.log(`- Locations: ${JSON.stringify(locations)}`);
 console.log(`- Max Items: ${maxItems}`);
@@ -62,11 +67,12 @@ const crawler = new PlaywrightCrawler({
     maxConcurrency: 5,
     minConcurrency: 1,
 
-    // Configure Apify proxy
+    // Configure Apify proxy (uses residential automatically if available)
     proxyConfiguration: await Actor.createProxyConfiguration(),
 
-    // Options to launch the browser
+    // Use our custom stealth launcher
     launchContext: {
+        launcher: chromium,
         launchOptions: {
             headless: true,
         },
@@ -87,7 +93,7 @@ const crawler = new PlaywrightCrawler({
                 }
             });
 
-            // Indeed pages often hang on load due to ad-scripts. Wait for DOM content instead of full window load.
+            // Wait for DOM content instead of full window load to speed up parsing
             gotoOptions.waitUntil = 'domcontentloaded';
             gotoOptions.timeout = 30000; // 30 seconds limit per page
         }
