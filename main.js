@@ -72,6 +72,27 @@ const crawler = new PlaywrightCrawler({
         },
     },
 
+    // Customize navigation hooks
+    preNavigationHooks: [
+        async (crawlingContext, gotoOptions) => {
+            const { page } = crawlingContext;
+
+            // Block images, media, and fonts to speed up load time and prevent page hangs
+            await page.route('**/*', (route) => {
+                const resourceType = route.request().resourceType();
+                if (['image', 'media', 'font'].includes(resourceType)) {
+                    route.abort();
+                } else {
+                    route.continue();
+                }
+            });
+
+            // Indeed pages often hang on load due to ad-scripts. Wait for DOM content instead of full window load.
+            gotoOptions.waitUntil = 'domcontentloaded';
+            gotoOptions.timeout = 30000; // 30 seconds limit per page
+        }
+    ],
+
     // Handle pages
     async requestHandler({ page, request, parseWithCheerio, log }) {
         const { userData } = request;
