@@ -1,5 +1,5 @@
 import { Actor } from 'apify';
-import { CheerioCrawler } from 'crawlee';
+import { PlaywrightCrawler } from 'crawlee';
 
 // Initialize the Apify SDK
 await Actor.init();
@@ -33,7 +33,7 @@ const {
     host = "www.indeed.com"
 } = input;
 
-console.log(`Starting Indeed Job Scraper with parameters:`);
+console.log(`Starting Indeed Job Scraper using Playwright with parameters:`);
 console.log(`- Keywords: ${JSON.stringify(keywords)}`);
 console.log(`- Locations: ${JSON.stringify(locations)}`);
 console.log(`- Max Items: ${maxItems}`);
@@ -56,56 +56,48 @@ function buildSearchUrl(domain, keyword, location, ageFilter, start) {
     return url;
 }
 
-// Setup Crawlee CheerioCrawler
-const crawler = new CheerioCrawler({
-    // Concurrency limit to prevent hitting Indeed's rate limits too fast
+// Setup Crawlee PlaywrightCrawler
+const crawler = new PlaywrightCrawler({
+    // Limit concurrency to avoid overloading or detection
     maxConcurrency: 5,
     minConcurrency: 1,
 
-    // Configure Apify proxy (or use default proxy configuration if local)
+    // Configure Apify proxy
     proxyConfiguration: await Actor.createProxyConfiguration(),
 
-    // Add randomized request headers to mimic standard browser requests
-    preNavigationHooks: [
-        async (crawlingContext, gotOptions) => {
-            const userAgents = [
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            ];
-            const randomAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
-
-            gotOptions.headers = {
-                ...gotOptions.headers,
-                'User-Agent': randomAgent,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-            };
-        }
-    ],
+    // Options to launch the browser
+    launchContext: {
+        launchOptions: {
+            headless: true,
+        },
+    },
 
     // Handle pages
-    async requestHandler({ $, request }) {
+    async requestHandler({ page, request, parseWithCheerio, log }) {
         const { userData } = request;
-        console.log(`Processing search page: ${request.url}`);
+        log.info(`Processing search page: ${request.url}`);
 
         if (savedJobsCount >= maxItems) {
-            console.log(`Reached limit of ${maxItems} jobs. Skipping extraction.`);
+            log.info(`Reached limit of ${maxItems} jobs. Skipping extraction.`);
             return;
         }
 
+        // Wait for job cards to render on the page
+        try {
+            await page.waitForSelector('.job_seen_beacon, td.result, .tapItem, #resultsCol', { timeout: 15000 });
+        } catch (err) {
+            log.warning(`Timeout waiting for job cards to render. Page might be empty, no jobs matched, or blocked by anti-bot.`);
+        }
+
+        // Use parseWithCheerio to leverage our existing jQuery extraction code
+        const $ = await parseWithCheerio();
+
         // Indeed job cards selectors
         const jobCards = $('.job_seen_beacon, td.result, .tapItem');
-        console.log(`Found ${jobCards.length} job cards on page start=${userData.start}`);
+        log.info(`Found ${jobCards.length} job cards on page start=${userData.start}`);
 
         if (jobCards.length === 0) {
-            console.log(`No job cards found on this page. Reached the end of listings for this query.`);
+            log.info(`No job cards found on this page. Reached the end of listings for this query.`);
             return;
         }
 
@@ -171,7 +163,7 @@ const crawler = new CheerioCrawler({
             }
 
             if (!isRelevant) {
-                console.log(`[Relevance Skipped] "${title}" at ${company} (does not match relevance keywords)`);
+                log.info(`[Relevance Skipped] "${title}" at ${company} (does not match relevance keywords)`);
                 continue;
             }
 
@@ -183,7 +175,7 @@ const crawler = new CheerioCrawler({
             processedJobIds.add(uniqueId);
 
             if (savedJobsCount >= maxItems) {
-                console.log(`Saved requested maximum of ${maxItems} jobs. Crawling complete!`);
+                log.info(`Saved requested maximum of ${maxItems} jobs. Crawling complete!`);
                 break;
             }
 
@@ -203,14 +195,14 @@ const crawler = new CheerioCrawler({
             // Push data to Apify dataset
             await Actor.pushData(result);
             savedJobsCount++;
-            console.log(`[Job ${savedJobsCount}/${maxItems} Saved] "${title}" at ${company}`);
+            log.info(`[Job ${savedJobsCount}/${maxItems} Saved] "${title}" at ${company}`);
         }
 
         // Programmatically enqueue the next page if there are more jobs to fetch
         const nextStart = userData.start + 10;
         if (savedJobsCount < maxItems && jobCards.length > 0 && nextStart < 1000) {
             const nextSearchUrl = buildSearchUrl(host, userData.keyword, userData.location, postedWithin, nextStart);
-            console.log(`Enqueuing next page: ${nextSearchUrl}`);
+            log.info(`Enqueuing next page: ${nextSearchUrl}`);
             await crawler.addRequests([{
                 url: nextSearchUrl,
                 userData: {
@@ -224,8 +216,8 @@ const crawler = new CheerioCrawler({
     },
 
     // Handle failed requests
-    failedRequestHandler({ request }) {
-        console.error(`Request ${request.url} failed repeatedly. Skipping.`);
+    failedRequestHandler({ request, log }) {
+        log.error(`Request ${request.url} failed repeatedly. Skipping.`);
     }
 });
 
