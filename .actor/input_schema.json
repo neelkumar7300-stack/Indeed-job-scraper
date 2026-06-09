@@ -1,0 +1,88 @@
+{
+  "title": "Indeed Job Scraper Input Schema",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "keywords": {
+      "title": "Search Keywords",
+      "type": "array",
+      "description": "Indeed search keywords (e.g. Job Titles or terms).",
+      "editor": "stringList",
+      "default": [
+        "Customer Support Specialist",
+        "Customer Service",
+        "Customer Success Representative",
+        "Customer Support Representative"
+      ]
+    },
+    "locations": {
+      "title": "Locations",
+      "type": "array",
+      "description": "Geographical search areas (e.g. 'Toronto, ON', 'New York, NY').",
+      "editor": "stringList",
+      "default": [
+        "Toronto, ON"
+      ]
+    },
+    "maxItems": {
+      "title": "Maximum Job Postings",
+      "type": "integer",
+      "description": "Limit the number of job postings to scrape in total.",
+      "editor": "number",
+      "default": 40,
+      "minimum": 1
+    },
+    "postedWithin": {
+      "title": "Date Posted Filter",
+      "type": "string",
+      "description": "Filter jobs by when they were posted (Indeed's fromage parameter in days).",
+      "editor": "select",
+      "default": "1",
+      "enum": [
+        "1",
+        "3",
+        "7",
+        "14",
+        "all"
+      ],
+      "enumTitles": [
+        "Past 24 Hours",
+        "Past 3 Days",
+        "Past Week",
+        "Past 14 Days",
+        "Anytime"
+      ]
+    },
+    "relevanceKeywords": {
+      "title": "Relevance Title Keywords",
+      "type": "array",
+      "description": "Only keep jobs whose titles contain at least one of these keywords (case-insensitive). Leave empty to save all matching jobs.",
+      "editor": "stringList",
+      "default": [
+        "customer",
+        "support",
+        "service",
+        "success",
+        "client",
+        "care",
+        "relations",
+        "representative",
+        "agent",
+        "specialist"
+      ]
+    },
+    "host": {
+      "title": "Indeed Regional Domain",
+      "type": "string",
+      "description": "Indeed regional domain (e.g., 'www.indeed.com', 'ca.indeed.com', 'uk.indeed.com').",
+      "editor": "textfield",
+      "default": "www.indeed.com"
+    }
+  },
+  "required": [
+    "keywords",
+    "locations",
+    "maxItems",
+    "postedWithin"
+  ]
+}

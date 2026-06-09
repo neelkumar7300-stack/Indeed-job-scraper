@@ -1,0 +1,8 @@
+{
+  "actorSpecification": 1,
+  "name": "indeed-job-scraper",
+  "title": "Indeed Job Scraper",
+  "description": "Scrapes Indeed job postings based on search keywords and locations with customizable filters.",
+  "version": "1.0",
+  "dockerfile": "./Dockerfile"
+}
